@@ -5,268 +5,212 @@ import plotly.express as px
 # ------------------------------
 # Load dataset
 # ------------------------------
-df = pd.read_csv('bank_transactions.csv')
+df = pd.read_csv("bank_transactions.csv")
 df = df.dropna()
 
-if 'Date' in df.columns:
-    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-    df['Year'] = df['Date'].dt.year
-    df['Month'] = df['Date'].dt.month_name()
+df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+df["Year"] = df["Date"].dt.year
+df["Month"] = df["Date"].dt.month_name()
+df["Month_Num"] = df["Date"].dt.month
+
+month_order = (
+    df[["Month", "Month_Num"]]
+    .drop_duplicates()
+    .sort_values("Month_Num")["Month"]
+    .tolist()
+)
 
 # ------------------------------
-# Themes
-# ------------------------------
-LIGHT_THEME = {
-    "background": "#f5f7fa",
-    "card": "white",
-    "text": "#333",
-    "header": "#0b5394",
-    "shadow": "0 4px 12px rgba(0,0,0,0.1)"
-}
-
-DARK_THEME = {
-    "background": "#1e1e2f",
-    "card": "#2b2b40",
-    "text": "#e0e0e0",
-    "header": "#1e88e5",
-    "shadow": "0 4px 12px rgba(255,255,255,0.1)"
-}
-
-# ------------------------------
-# App setup
+# App Setup
 # ------------------------------
 app = Dash(__name__)
-app.title = "🏦 Banking Dashboard"
+app.title = "Banking Transaction Analytics"
 
-years_available = sorted(df['Year'].dropna().unique().astype(int))
+years = sorted(df["Year"].dropna().unique().astype(int))
+
+# ------------------------------
+# KPI CALCULATIONS
+# ------------------------------
+def kpi_values(data):
+    total = data["Amount"].sum()
+    credit = data[data["Transaction_Type"] == "Credit"]["Amount"].sum()
+    debit = data[data["Transaction_Type"] == "Debit"]["Amount"].sum()
+    net = credit - debit
+    return total, credit, debit, net
 
 # ------------------------------
 # Layout
 # ------------------------------
 app.layout = html.Div(
-    id="main-div",
     style={
-        "fontFamily": "Segoe UI, sans-serif",
+        "backgroundColor": "#f5f7fa",
+        "color": "#222",
+        "fontFamily": "Segoe UI",
         "padding": "30px",
-        "transition": "background-color 0.5s ease, color 0.5s ease",
     },
     children=[
+        html.H1(
+            "🏦 Banking Transaction Analytics Dashboard",
+            style={"textAlign": "center"},
+        ),
+        html.P(
+            "Exploratory Data Analysis & Visualization (2015–2025)",
+            style={"textAlign": "center", "color": "#555"},
+        ),
+
+        # ---------------- KPI CARDS ----------------
         html.Div(
-            id="header-div",
+            id="kpi-cards",
             style={
-                "textAlign": "center",
-                "padding": "20px",
-                "borderRadius": "10px",
-                "marginBottom": "20px",
-                "transition": "background-color 0.5s ease, color 0.5s ease",
+                "display": "grid",
+                "gridTemplateColumns": "repeat(4, 1fr)",
+                "gap": "20px",
+                "marginTop": "30px",
+            },
+        ),
+
+        # ---------------- Controls ----------------
+        html.Div(
+            style={
+                "display": "grid",
+                "gridTemplateColumns": "1fr 1fr 1fr",
+                "gap": "20px",
+                "marginTop": "30px",
             },
             children=[
-                html.H1(
-                    "🏦 Banking Customer Transaction Analysis",
-                    style={"marginBottom": "10px"}
+                dcc.Dropdown(
+                    id="year-filter",
+                    options=[{"label": "All Years", "value": "ALL"}]
+                    + [{"label": str(y), "value": y} for y in years],
+                    value="ALL",
                 ),
-                html.P(
-                    "Analyze and visualize customer transactions (2015–2025) interactively",
-                    style={"fontSize": "18px"}
-                ),
-                html.Div(
-                    style={"marginTop": "10px"},
-                    children=[
-                        html.Label("🌙 Dark Mode", style={"marginRight": "10px", "fontWeight": "bold"}),
-                        dcc.RadioItems(
-                            id="theme-toggle",
-                            options=[
-                                {"label": "Off", "value": "light"},
-                                {"label": "On", "value": "dark"},
-                            ],
-                            value="light",
-                            inline=True,
-                            inputStyle={"marginRight": "5px", "marginLeft": "10px"},
-                            style={"display": "inline-block"}
-                        ),
+                dcc.Dropdown(
+                    id="chart-filter",
+                    options=[
+                        {"label": "Credit vs Debit Distribution", "value": "donut"},
+                        {"label": "Monthly Transaction Trend", "value": "trend"},
+                        {"label": "Transaction Amount Distribution", "value": "box"},
+                        {"label": "Transaction Heatmap", "value": "heatmap"},
                     ],
+                    value="donut",
+                ),
+                dcc.RadioItems(
+                    id="animation-toggle",
+                    options=[
+                        {"label": "Animation OFF", "value": "off"},
+                        {"label": "Animation ON", "value": "on"},
+                    ],
+                    value="off",
+                    inline=True,
                 ),
             ],
         ),
 
-        html.Div(
-            id="content-card",
-            style={
-                "borderRadius": "12px",
-                "padding": "25px",
-                "boxShadow": "0 4px 12px rgba(0,0,0,0.1)",
-                "maxWidth": "950px",
-                "margin": "auto",
-                "transition": "background-color 0.5s ease, color 0.5s ease",
-            },
-            children=[
-                html.Div(
-                    style={
-                        "display": "flex",
-                        "gap": "20px",
-                        "justifyContent": "space-between",
-                        "marginBottom": "20px",
-                    },
-                    children=[
-                        html.Div(
-                            style={"flex": "1"},
-                            children=[
-                                html.Label(
-                                    "Select Visualization Type:",
-                                    style={
-                                        "fontWeight": "bold",
-                                        "fontSize": "16px",
-                                        "display": "block",
-                                        "marginBottom": "5px",
-                                    },
-                                ),
-                                dcc.Dropdown(
-                                    id="plot-dropdown",
-                                    options=[
-                                        {"label": "Count by Transaction Type", "value": "count_type"},
-                                        {"label": "Amount Distribution by Transaction Type", "value": "amount_type"},
-                                        {"label": "Monthly Transaction Amount Sum", "value": "monthly_sum"},
-                                    ],
-                                    value="count_type",
-                                    clearable=False,
-                                    style={"borderRadius": "8px"},
-                                ),
-                            ],
-                        ),
-                        html.Div(
-                            style={"flex": "1"},
-                            children=[
-                                html.Label(
-                                    "Select Year:",
-                                    style={
-                                        "fontWeight": "bold",
-                                        "fontSize": "16px",
-                                        "display": "block",
-                                        "marginBottom": "5px",
-                                    },
-                                ),
-                                dcc.Dropdown(
-                                    id="year-dropdown",
-                                    options=[{"label": str(y), "value": y} for y in years_available],
-                                    value=None,
-                                    placeholder="All Years",
-                                    clearable=True,
-                                    style={"borderRadius": "8px"},
-                                ),
-                            ],
-                        ),
-                    ],
-                ),
-                dcc.Graph(id="graph-output", style={"height": "600px"}),
-            ],
+        # ---------------- Graph ----------------
+        dcc.Graph(
+            id="main-graph",
+            style={"marginTop": "30px", "height": "550px"},
         ),
     ],
 )
 
 # ------------------------------
-# Callbacks
+# Callback
 # ------------------------------
 @app.callback(
-    Output("graph-output", "figure"),
-    Output("main-div", "style"),
-    Output("header-div", "style"),
-    Output("content-card", "style"),
-    Input("plot-dropdown", "value"),
-    Input("year-dropdown", "value"),
-    Input("theme-toggle", "value"),
+    Output("kpi-cards", "children"),
+    Output("main-graph", "figure"),
+    Input("year-filter", "value"),
+    Input("chart-filter", "value"),
+    Input("animation-toggle", "value"),
 )
-def update_graph(selected_option, selected_year, theme_choice):
-    theme = DARK_THEME if theme_choice == "dark" else LIGHT_THEME
-    dff = df.copy()
+def update_dashboard(selected_year, chart_type, animation_mode):
+    data = df.copy()
+    if selected_year != "ALL":
+        data = data[data["Year"] == selected_year]
 
-    if selected_year:
-        dff = dff[dff["Year"] == selected_year]
+    total, credit, debit, net = kpi_values(data)
 
-    # -------------------- Graphs --------------------
-    if selected_option == "count_type":
-        fig = px.histogram(
-            dff,
-            x="Transaction_Type",
-            color="Transaction_Type",
-            title=f"Count of Transactions by Type{' - ' + str(selected_year) if selected_year else ''}",
-            template="plotly_dark" if theme_choice == "dark" else "simple_white",
+    cards = [
+        html.Div(
+            style={
+                "backgroundColor": "white",
+                "padding": "20px",
+                "borderRadius": "12px",
+                "boxShadow": "0 4px 12px rgba(0,0,0,0.1)",
+                "textAlign": "center",
+            },
+            children=[html.H4(label), html.H2(value)],
+        )
+        for label, value in [
+            ("Total Amount", f"₹ {total:,.0f}"),
+            ("Total Credit", f"₹ {credit:,.0f}"),
+            ("Total Debit", f"₹ {debit:,.0f}"),
+            ("Net Balance", f"₹ {net:,.0f}"),
+        ]
+    ]
+
+    transition_time = 600 if animation_mode == "on" else 0
+
+    if chart_type == "donut":
+        fig = px.pie(
+            data,
+            names="Transaction_Type",
+            values="Amount",
+            hole=0.5,
+            title="Credit vs Debit Distribution",
         )
 
-    elif selected_option == "amount_type":
-        fig = px.box(
-            dff,
-            x="Transaction_Type",
-            y="Amount",
-            color="Transaction_Type",
-            title=f"Transaction Amount by Type{' - ' + str(selected_year) if selected_year else ''}",
-            template="plotly_dark" if theme_choice == "dark" else "simple_white",
+    elif chart_type == "trend":
+        monthly = (
+            data.groupby(["Month", "Month_Num"])["Amount"]
+            .sum()
+            .reset_index()
+            .sort_values("Month_Num")
         )
-
-    elif selected_option == "monthly_sum":
-        if "Month" not in dff.columns:
-            return px.scatter(title="No Month data available"), {}, {}, {}
-        monthly = dff.groupby("Month", sort=False)["Amount"].sum().reset_index()
         fig = px.line(
             monthly,
             x="Month",
             y="Amount",
             markers=True,
-            title=f"Monthly Transaction Amount Sum{' - ' + str(selected_year) if selected_year else ''}",
-            template="plotly_dark" if theme_choice == "dark" else "simple_white",
+            category_orders={"Month": month_order},
+            title="Monthly Transaction Trend",
+        )
+
+    elif chart_type == "box":
+        fig = px.box(
+            data,
+            x="Transaction_Type",
+            y="Amount",
+            color="Transaction_Type",
+            title="Transaction Amount Distribution & Outliers",
         )
 
     else:
-        fig = px.histogram(
-            dff,
-            x="Transaction_Type",
-            title="Count of Transactions by Type",
-            template="plotly_dark" if theme_choice == "dark" else "simple_white",
+        heat = (
+            data.groupby(["Month", "Transaction_Type"])["Amount"]
+            .sum()
+            .reset_index()
+        )
+        fig = px.density_heatmap(
+            heat,
+            x="Month",
+            y="Transaction_Type",
+            z="Amount",
+            category_orders={"Month": month_order},
+            title="Transaction Heatmap (Month vs Type)",
         )
 
-    # -------------------- Figure Styling --------------------
     fig.update_layout(
-        title_font_size=22,
+        template="simple_white",
         title_x=0.5,
-        plot_bgcolor=theme["background"],
-        paper_bgcolor=theme["background"],
-        font=dict(family="Segoe UI", size=14, color=theme["text"]),
-        margin=dict(l=40, r=40, t=80, b=40),
-        transition_duration=500,
+        transition_duration=transition_time,
     )
 
-    # -------------------- Theming --------------------
-    main_style = {
-        "fontFamily": "Segoe UI, sans-serif",
-        "backgroundColor": theme["background"],
-        "padding": "30px",
-        "color": theme["text"],
-        "transition": "background-color 0.5s ease, color 0.5s ease",
-    }
-    header_style = {
-        "textAlign": "center",
-        "backgroundColor": theme["header"],
-        "padding": "20px",
-        "borderRadius": "10px",
-        "color": "white",
-        "boxShadow": theme["shadow"],
-        "transition": "background-color 0.5s ease, color 0.5s ease",
-    }
-    card_style = {
-        "backgroundColor": theme["card"],
-        "borderRadius": "12px",
-        "padding": "25px",
-        "boxShadow": theme["shadow"],
-        "maxWidth": "950px",
-        "margin": "auto",
-        "color": theme["text"],
-        "transition": "background-color 0.5s ease, color 0.5s ease",
-    }
-
-    return fig, main_style, header_style, card_style
-
+    return cards, fig
 
 # ------------------------------
-# Run app
+# Run App
 # ------------------------------
 if __name__ == "__main__":
     app.run(debug=True)
