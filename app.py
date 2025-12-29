@@ -1,18 +1,13 @@
 import pandas as pd
 from dash import Dash, dcc, html, Input, Output
 import plotly.express as px
-import os
 
 # ------------------------------
 # Load dataset
 # ------------------------------
-CSV_PATH = r"D:\PERSONAL\MY CODING PROJECTS\Python Projects\Data Visualise\DADV Project\bank_transactions.csv"
-
-if not os.path.exists(CSV_PATH):
-    raise FileNotFoundError(f"CSV file not found at: {CSV_PATH}")
-
-df = pd.read_csv(CSV_PATH)
+df = pd.read_csv("Data Visualise\\DADV Project\\bank_transactions.csv")
 df = df.dropna()
+
 
 df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
 df["Year"] = df["Date"].dt.year
