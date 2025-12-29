@@ -1,11 +1,17 @@
 import pandas as pd
 from dash import Dash, dcc, html, Input, Output
 import plotly.express as px
+import os
 
 # ------------------------------
 # Load dataset
 # ------------------------------
-df = pd.read_csv("bank_transactions.csv")
+CSV_PATH = r"D:\PERSONAL\MY CODING PROJECTS\Python Projects\Data Visualise\DADV Project\bank_transactions.csv"
+
+if not os.path.exists(CSV_PATH):
+    raise FileNotFoundError(f"CSV file not found at: {CSV_PATH}")
+
+df = pd.read_csv(CSV_PATH)
 df = df.dropna()
 
 df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
@@ -54,11 +60,11 @@ app.layout = html.Div(
             style={"textAlign": "center"},
         ),
         html.P(
-            "Exploratory Data Analysis & Visualization (2015–2025)",
+            "Exploratory Data Analysis & Visualization",
             style={"textAlign": "center", "color": "#555"},
         ),
 
-        # ---------------- KPI CARDS ----------------
+        # KPI Cards
         html.Div(
             id="kpi-cards",
             style={
@@ -69,11 +75,11 @@ app.layout = html.Div(
             },
         ),
 
-        # ---------------- Controls ----------------
+        # Controls
         html.Div(
             style={
                 "display": "grid",
-                "gridTemplateColumns": "1fr 1fr 1fr",
+                "gridTemplateColumns": "1fr 1fr",
                 "gap": "20px",
                 "marginTop": "30px",
             },
@@ -94,19 +100,10 @@ app.layout = html.Div(
                     ],
                     value="donut",
                 ),
-                dcc.RadioItems(
-                    id="animation-toggle",
-                    options=[
-                        {"label": "Animation OFF", "value": "off"},
-                        {"label": "Animation ON", "value": "on"},
-                    ],
-                    value="off",
-                    inline=True,
-                ),
             ],
         ),
 
-        # ---------------- Graph ----------------
+        # Graph
         dcc.Graph(
             id="main-graph",
             style={"marginTop": "30px", "height": "550px"},
@@ -122,9 +119,8 @@ app.layout = html.Div(
     Output("main-graph", "figure"),
     Input("year-filter", "value"),
     Input("chart-filter", "value"),
-    Input("animation-toggle", "value"),
 )
-def update_dashboard(selected_year, chart_type, animation_mode):
+def update_dashboard(selected_year, chart_type):
     data = df.copy()
     if selected_year != "ALL":
         data = data[data["Year"] == selected_year]
@@ -149,8 +145,6 @@ def update_dashboard(selected_year, chart_type, animation_mode):
             ("Net Balance", f"₹ {net:,.0f}"),
         ]
     ]
-
-    transition_time = 600 if animation_mode == "on" else 0
 
     if chart_type == "donut":
         fig = px.pie(
@@ -183,7 +177,7 @@ def update_dashboard(selected_year, chart_type, animation_mode):
             x="Transaction_Type",
             y="Amount",
             color="Transaction_Type",
-            title="Transaction Amount Distribution & Outliers",
+            title="Transaction Amount Distribution",
         )
 
     else:
@@ -198,13 +192,12 @@ def update_dashboard(selected_year, chart_type, animation_mode):
             y="Transaction_Type",
             z="Amount",
             category_orders={"Month": month_order},
-            title="Transaction Heatmap (Month vs Type)",
+            title="Transaction Heatmap",
         )
 
     fig.update_layout(
         template="simple_white",
-        title_x=0.5,
-        transition_duration=transition_time,
+        title_x=0.5
     )
 
     return cards, fig
